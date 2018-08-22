@@ -1,0 +1,133 @@
+#! /usr/bin/env python
+"""This module supplies dev commands for the project
+
+It works on a model where all building happens inside of a docker
+container described by the `stack-docker-build` repo.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+import threading
+import time
+import urllib2
+
+####################################################################
+# Support functions
+####################################################################
+
+
+def setup_argument_parser():
+    """ All of the command line agruments for the system"""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+    subparsers.add_parser('system-up').set_defaults(func=system_up)
+    subparsers.add_parser('system-down').set_defaults(func=system_down)
+    subparsers.add_parser('system-restart').set_defaults(func=system_restart)
+    subparsers.add_parser('run').set_defaults(func=run)
+    subparsers.add_parser('clean').set_defaults(func=clean)
+    subparsers.add_parser('build').set_defaults(func=build)
+    subparsers.add_parser('clean').set_defaults(func=clean)
+    subparsers.add_parser('test').set_defaults(func=test)
+    subparsers.add_parser('shell').set_defaults(func=shell)
+    subparsers.add_parser('autobuild').set_defaults(func=autobuild)
+    subparsers.add_parser('install').set_defaults(func=install)
+    subparsers.add_parser('upgrade').set_defaults(func=upgrade)
+
+    return parser
+
+
+def run_in_docker_cmd(cmd):
+    """The base docker exec command to run any command in the build-env
+       container. This needs to be prefixed to any and all build
+       commands."""
+    return ["docker",
+            "exec",
+            "-ti",
+            "flow-example-project_build-env_1",
+            "bash", "-c",
+            "cd /var/build; " + cmd]
+
+
+def run_in_docker(args, cmd):
+    """ Run any string command in the docker container """
+    subprocess.check_call(run_in_docker_cmd(cmd))
+
+
+def compose(args, compose_command):
+    """ Run any compose command """
+    subprocess.check_call(["docker-compose"] + compose_command)
+
+####################################################################
+# Compose oriented functions
+####################################################################
+
+
+def system_up(args):
+    compose(args, ["up", "-d"])
+
+
+def system_restart(args):
+    compose(args, ["restart"])
+
+
+def system_down(args):
+    compose(args, ["down", "--remove-orphans", "-v"])
+
+####################################################################
+# `In Container` Functions
+####################################################################
+
+
+def test(args):
+    system_up(args)
+    run_in_docker(args, "gulp test")
+
+
+def run(args):
+    system_up(args)
+    run_in_docker(args, """cd dist/site; firebase serve -o 0.0.0.0 \
+       --project flow-example-project-staging""")
+
+
+
+def build(args):
+    system_up(args)
+    run_in_docker(args, "gulp build")
+
+
+def clean(args):
+    system_up(args)
+    run_in_docker(args, "rm -rf dist")
+
+
+def shell(args):
+    system_up(args)
+    os.execvp("docker", ["docker", "exec", "-it",
+                         "flow-example-project_build-env_1", "bash"])
+
+
+def autobuild(args):
+    system_up(args)
+    run_in_docker(args, "gulp watch")
+
+
+def install(args):
+    system_up(args)
+    run_in_docker(args, "yarn install")
+
+
+def upgrade(args):
+    system_up(args)
+    run_in_docker(args, "yarn upgrade")
+
+
+def main():
+    parser = setup_argument_parser()
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

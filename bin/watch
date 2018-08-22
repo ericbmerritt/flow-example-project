@@ -1,0 +1,10 @@
+#! /usr/bin/env bash
+
+#
+# Entr is a nice little watch command that can
+# be found here: http://entrproject.org/
+# its already in the related docker container
+
+set -e
+
+find ./src | entr gulp firebase
